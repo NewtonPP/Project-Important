@@ -114,3 +114,27 @@ class GuidedBreakdownResponse(BaseModel):
     category: str
     tasks: List[TaskItem]
     has_more_in_category: bool
+
+
+class GoogleAuthRequest(BaseModel):
+    """Request payload for Google ID token exchange."""
+
+    id_token: str
+
+
+class UserProfile(BaseModel):
+    """Authenticated user profile."""
+
+    id: str
+    email: str
+    name: Optional[str] = None
+    picture: Optional[str] = None
+
+
+class AuthResponse(BaseModel):
+    """Response returned after successful authentication."""
+
+    access_token: str
+    token_type: str = "bearer"
+    expires_in: int
+    user: UserProfile

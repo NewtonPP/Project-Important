@@ -135,7 +135,7 @@ def test_guided_breakdown_extraction(extraction_service):
         "has_more_in_category": False
     }
     
-    with patch.object(extraction_service, '_call_gpt4o', return_value=mock_response):
+    with patch.object(extraction_service, '_call_gpt4o_breakdown', return_value=mock_response):
         result = extraction_service.guided_breakdown_extraction(original, category, response)
         
         assert len(result["tasks"]) == 2
