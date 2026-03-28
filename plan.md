@@ -2,7 +2,7 @@ ClarityVoice Backend MVP: 3-Person Team Sprint
 
 Project Onboarding Summary
 
-ClarityVoice is a mental health-focused "Cognitive Offloading" tool. Users often struggle with "Executive Dysfunction"—a state where mental clutter makes it impossible to start tasks.
+ClarityVoice is a mental health-focused "Cognitive Offloading" tool. Users often struggle with "Executive Dysfunction"a state where mental clutter makes it impossible to start tasks.
 
 The Mission: Turn a messy, emotional voice "brain dump" into a structured, low-friction task list.
 How it works: 1. The user speaks freely (venting, worrying, listing).
