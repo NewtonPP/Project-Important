@@ -1,55 +1,110 @@
 # ClarityVoice Backend
 
-Transform emotional voice brain dumps into actionable task lists using AI.
-
-## Quick Start
-
-```bash
-# 1. Add your OpenAI API key to .env
-cp .env.example .env
-# Edit .env and set OPENAI_API_KEY=sk-proj-your-key
-
-# 2. Run the backend
-./start.sh
-```
-
-API docs: http://localhost:8000/docs
+Transform messy voice brain dumps into clear, actionable task lists.
 
 ## What It Does
 
-1. Upload audio (voice recording of your thoughts)
-2. Transcribe using OpenAI Whisper
-3. Extract tasks using GPT-4o with clarity scoring
-4. Get results: Clean task list or clarification question
+**Input**: Overwhelming voice recording ("Everything is too much...")  
+**Output**: Organized, prioritized task list
 
-## API Endpoints
+Built for people experiencing executive dysfunction.
 
-- `POST /api/v1/process` - Main endpoint (audio to tasks)
-- `GET /api/v1/sessions` - List sessions
-- `PATCH /api/v1/tasks/{id}` - Update task status
-- More endpoints in [API_BOILERPLATE.md](API_BOILERPLATE.md)
+---
 
-## Requirements
+## Quick Start
 
-- Python 3.10+
-- OpenAI API key (get from https://platform.openai.com/api-keys)
+### 1. Setup
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Add your OpenAI API key
+echo "OPENAI_API_KEY=sk-proj-your-key-here" > .env
+
+# Start server
+uvicorn main:app --port 8002
+```
+
+### 2. Test
+Open http://localhost:8002/docs and try uploading an audio file.
+
+---
 
 ## Documentation
 
-- [Setup Guide](README_SETUP.md) - Detailed installation
-- [API Boilerplate](API_BOILERPLATE.md) - Complete API specs
-- [Implementation Summary](IMPLEMENTATION_SUMMARY.md) - Architecture overview
+- **FRONTEND_GUIDE.md** - Complete integration guide for frontend engineers
+- **API.md** - API endpoint reference with examples
+- **ARCHITECTURE.md** - System design and data flow diagrams
+
+---
+
+## Features
+
+- Audio transcription (OpenAI Whisper)
+- Smart task extraction (GPT-4o)
+- Clarity scoring (1-10 scale)
+- Adaptive clarification flow
+- Guided category breakdown for very vague inputs
+- Task management (complete, delete)
+- Session persistence (SQLite)
+
+---
+
+## Tech Stack
+
+- **Framework**: FastAPI
+- **Database**: SQLite + SQLModel
+- **AI**: OpenAI (Whisper + GPT-4o)
+- **Testing**: pytest
+
+---
+
+## API Endpoints
+
+- `POST /api/v1/process` - Main endpoint (audio → tasks)
+- `POST /api/v1/tasks/refine` - Clarification refinement
+- `POST /api/v1/tasks/guided-breakdown` - Category-specific extraction
+- `GET /api/v1/sessions` - List sessions
+- `GET /api/v1/sessions/{id}` - Get session with tasks
+- `PATCH /api/v1/tasks/{id}` - Update task status
+- `DELETE /api/v1/tasks/{id}` - Delete task
+
+See `API.md` for detailed specs.
+
+---
 
 ## Testing
 
 ```bash
-./run_tests.sh
+# Run all tests
+pytest tests/ -v
+
+# Test with edge cases
+python3 comprehensive_test.py
 ```
-
-## Cost
-
-Approximately $0.01 per audio session (Whisper + GPT-4o)
 
 ---
 
-Built for mental health support and executive dysfunction management.
+## Cost Estimates
+
+- Clear input: ~$0.016 per request
+- With clarification: ~$0.026 per request
+- Full breakdown: ~$0.056 per request
+- Average: ~$0.020 per request
+
+---
+
+## Frontend Integration
+
+Read `FRONTEND_GUIDE.md` for:
+- Complete implementation flow
+- UI/UX requirements
+- Sample React code
+- TypeScript types
+- Error handling
+
+---
+
+## License
+
+MIT

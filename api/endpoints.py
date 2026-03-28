@@ -16,7 +16,9 @@ from models.schemas import (
     TaskUpdateRequest,
     SessionListResponse,
     SessionSummary,
-    PaginationInfo
+    PaginationInfo,
+    GuidedBreakdownRequest,
+    GuidedBreakdownResponse
 )
 from services.transcription import TranscriptionService
 from services.task_extraction import TaskExtractionService
@@ -86,12 +88,16 @@ async def extract_tasks(
     """
     extraction_result = task_extraction_service.extract_tasks(request.transcript)
     
+    suggested_categories = extraction_result.get("suggested_breakdown_categories")
+    
     session = SessionDB(
         id=str(uuid4()),
         raw_transcript=request.transcript,
         clarity_score=extraction_result["clarity_score"],
         needs_clarification=extraction_result["needs_clarification"],
-        follow_up_question=extraction_result.get("follow_up_question")
+        follow_up_question=extraction_result.get("follow_up_question"),
+        suggested_breakdown_categories=",".join(suggested_categories) if suggested_categories else None,
+        breakdown_mode=False
     )
     db.add(session)
     
@@ -125,6 +131,7 @@ async def extract_tasks(
         clarity_score=session.clarity_score,
         tasks=task_items,
         follow_up_question=session.follow_up_question,
+        suggested_breakdown_categories=suggested_categories,
         metadata={
             "transcript_length": len(request.transcript)
         }
@@ -157,6 +164,11 @@ async def refine_tasks(
     session.follow_up_question = refinement_result.get("follow_up_question")
     session.updated_at = datetime.utcnow()
     
+    suggested_categories = refinement_result.get("suggested_breakdown_categories")
+    if suggested_categories:
+        session.suggested_breakdown_categories = ",".join(suggested_categories)
+        session.breakdown_mode = True
+    
     task_items = []
     for task_data in refinement_result["tasks"]:
         task = TaskDB(
@@ -186,7 +198,8 @@ async def refine_tasks(
         needs_clarification=session.needs_clarification,
         clarity_score=session.clarity_score,
         tasks=task_items,
-        follow_up_question=session.follow_up_question
+        follow_up_question=session.follow_up_question,
+        suggested_breakdown_categories=suggested_categories
     )
 
 
@@ -222,12 +235,16 @@ async def process_audio(
         
         extraction_result = task_extraction_service.extract_tasks(transcript)
         
+        suggested_categories = extraction_result.get("suggested_breakdown_categories")
+        
         session = SessionDB(
             id=str(uuid4()),
             raw_transcript=transcript,
             clarity_score=extraction_result["clarity_score"],
             needs_clarification=extraction_result["needs_clarification"],
-            follow_up_question=extraction_result.get("follow_up_question")
+            follow_up_question=extraction_result.get("follow_up_question"),
+            suggested_breakdown_categories=",".join(suggested_categories) if suggested_categories else None,
+            breakdown_mode=False
         )
         db.add(session)
         
@@ -263,6 +280,7 @@ async def process_audio(
             clarity_score=session.clarity_score,
             tasks=task_items,
             follow_up_question=session.follow_up_question,
+            suggested_breakdown_categories=suggested_categories,
             metadata={
                 "transcript_length": len(transcript),
                 "audio_filename": audio_file.filename
@@ -360,7 +378,65 @@ async def get_session(
         needs_clarification=session.needs_clarification,
         clarity_score=session.clarity_score or 0,
         tasks=task_items,
-        follow_up_question=session.follow_up_question
+        follow_up_question=session.follow_up_question,
+        suggested_breakdown_categories=session.suggested_breakdown_categories.split(",") if session.suggested_breakdown_categories else None
+    )
+
+
+@router.post("/tasks/guided-breakdown", response_model=GuidedBreakdownResponse)
+async def guided_breakdown(
+    request: GuidedBreakdownRequest,
+    db: Session = Depends(get_db_session)
+):
+    """
+    Extract tasks from guided category breakdown.
+    This endpoint is used when the user accepts structured breakdown and provides category-specific responses.
+    """
+    statement = select(SessionDB).where(SessionDB.id == request.session_id)
+    session = db.exec(statement).first()
+    
+    if not session:
+        raise Exception("SESSION_NOT_FOUND")
+    
+    breakdown_result = task_extraction_service.guided_breakdown_extraction(
+        original_transcript=session.raw_transcript,
+        category=request.category,
+        category_response=request.category_response
+    )
+    
+    if not session.breakdown_mode:
+        session.breakdown_mode = True
+        session.updated_at = datetime.utcnow()
+    
+    task_items = []
+    for task_data in breakdown_result["tasks"]:
+        task = TaskDB(
+            id=str(uuid4()),
+            session_id=session.id,
+            text=task_data["text"],
+            original_thought_snippet=task_data.get("original_thought_snippet"),
+            priority=task_data.get("priority", "medium"),
+            estimated_duration_minutes=task_data.get("estimated_duration_minutes")
+        )
+        db.add(task)
+        task_items.append(TaskItem(
+            id=task.id,
+            text=task.text,
+            is_completed=task.is_completed,
+            original_thought_snippet=task.original_thought_snippet,
+            estimated_duration_minutes=task.estimated_duration_minutes,
+            priority=task.priority,
+            created_at=task.created_at,
+            updated_at=task.updated_at
+        ))
+    
+    db.commit()
+    
+    return GuidedBreakdownResponse(
+        session_id=session.id,
+        category=request.category,
+        tasks=task_items,
+        has_more_in_category=breakdown_result.get("has_more_in_category", False)
     )
 
 

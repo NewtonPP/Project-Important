@@ -25,6 +25,7 @@ class SessionResponse(BaseModel):
     clarity_score: int = Field(ge=1, le=10)
     tasks: List[TaskItem]
     follow_up_question: Optional[str] = None
+    suggested_breakdown_categories: Optional[List[str]] = None
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
 
@@ -96,3 +97,20 @@ class ErrorDetail(BaseModel):
     message: str
     details: Optional[str] = None
     timestamp: datetime = Field(default_factory=datetime.utcnow)
+
+
+class GuidedBreakdownRequest(BaseModel):
+    """Request for guided breakdown of tasks by category."""
+    
+    session_id: str
+    category: str
+    category_response: str
+
+
+class GuidedBreakdownResponse(BaseModel):
+    """Response from guided breakdown containing extracted tasks for a category."""
+    
+    session_id: str
+    category: str
+    tasks: List[TaskItem]
+    has_more_in_category: bool

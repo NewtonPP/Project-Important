@@ -4,7 +4,7 @@ import time
 from typing import Dict, Any
 from openai import OpenAI, APIError, RateLimitError, APITimeoutError
 from config import settings
-from services.prompts import TASK_ARCHITECT_PROMPT, CLARIFICATION_REFINEMENT_PROMPT
+from services.prompts import TASK_ARCHITECT_PROMPT, CLARIFICATION_REFINEMENT_PROMPT, GUIDED_BREAKDOWN_PROMPT
 
 logger = logging.getLogger(__name__)
 
@@ -161,3 +161,108 @@ class TaskExtractionService:
         
         if result["needs_clarification"] and not result.get("follow_up_question"):
             raise ValueError("follow_up_question required when needs_clarification is true")
+    
+    def guided_breakdown_extraction(
+        self,
+        original_transcript: str,
+        category: str,
+        category_response: str
+    ) -> Dict[str, Any]:
+        """
+        Extract tasks from a specific category during guided breakdown.
+        
+        Args:
+            original_transcript: Original user transcript
+            category: The category being explored
+            category_response: User's response about this category
+            
+        Returns:
+            Dict with tasks and has_more_in_category flag
+        """
+        logger.info(f"Guided breakdown extraction for category: {category}")
+        
+        system_prompt = GUIDED_BREAKDOWN_PROMPT.replace(
+            "{{original_transcript}}", original_transcript
+        ).replace(
+            "{{category}}", category
+        ).replace(
+            "{{category_response}}", category_response
+        )
+        
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": category_response}
+        ]
+        
+        result = self._call_gpt4o_breakdown(messages)
+        logger.info(f"Guided breakdown complete for {category}: {len(result.get('tasks', []))} tasks extracted")
+        return result
+    
+    def _call_gpt4o_breakdown(self, messages: list) -> Dict[str, Any]:
+        """
+        Call GPT-4o API for breakdown extraction (different validation).
+        
+        Args:
+            messages: List of message dicts for chat completion
+            
+        Returns:
+            Parsed JSON response
+            
+        Raises:
+            Exception: If API call fails after retries
+        """
+        for attempt in range(self.max_retries):
+            try:
+                response = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=messages,
+                    response_format={"type": "json_object"},
+                    temperature=0.3,
+                    max_tokens=1500,
+                    timeout=settings.api_timeout_seconds
+                )
+                
+                content = response.choices[0].message.content
+                result = json.loads(content)
+                
+                if "tasks" not in result or not isinstance(result["tasks"], list):
+                    raise ValueError("Invalid breakdown response: missing or invalid 'tasks' field")
+                
+                return result
+            
+            except json.JSONDecodeError as e:
+                logger.error(f"Invalid JSON response from GPT-4o: {str(e)}")
+                raise Exception("TASK_EXTRACTION_FAILED") from e
+            
+            except RateLimitError as e:
+                if attempt < self.max_retries - 1:
+                    wait_time = self.backoff_factor ** attempt
+                    logger.warning(f"Rate limit hit, retrying in {wait_time}s")
+                    time.sleep(wait_time)
+                else:
+                    logger.error("Rate limit exceeded after all retries")
+                    raise Exception("RATE_LIMIT_EXCEEDED") from e
+            
+            except APITimeoutError as e:
+                if attempt < self.max_retries - 1:
+                    wait_time = self.backoff_factor ** attempt
+                    logger.warning(f"API timeout, retrying in {wait_time}s")
+                    time.sleep(wait_time)
+                else:
+                    logger.error("API timeout after all retries")
+                    raise Exception("TASK_EXTRACTION_FAILED") from e
+            
+            except APIError as e:
+                if e.status_code in [500, 503] and attempt < self.max_retries - 1:
+                    wait_time = self.backoff_factor ** attempt
+                    logger.warning(f"API error {e.status_code}, retrying in {wait_time}s")
+                    time.sleep(wait_time)
+                else:
+                    logger.error(f"API error: {e.status_code} - {str(e)}")
+                    raise Exception("TASK_EXTRACTION_FAILED") from e
+            
+            except Exception as e:
+                logger.error(f"Unexpected error during breakdown extraction: {str(e)}")
+                raise Exception("TASK_EXTRACTION_FAILED") from e
+        
+        raise Exception("TASK_EXTRACTION_FAILED")

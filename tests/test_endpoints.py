@@ -139,3 +139,149 @@ def test_extract_tasks_endpoint(client):
         
         assert response.status_code == 200
         assert response.json()["clarity_score"] == 7
+
+
+@patch("services.task_extraction.TaskExtractionService.extract_tasks")
+def test_process_with_breakdown_suggestion(mock_extract, client):
+    """Test /process endpoint when AI suggests breakdown categories."""
+    mock_extract.return_value = {
+        "clarity_score": 4,
+        "tasks": [],
+        "needs_clarification": True,
+        "follow_up_question": "I hear you're overwhelmed. Which area feels most urgent?",
+        "suggested_breakdown_categories": ["work", "home", "errands"]
+    }
+    
+    with patch("services.transcription.TranscriptionService.transcribe_audio") as mock_transcribe:
+        mock_transcribe.return_value = "Too much to do everywhere"
+        
+        response = client.post(
+            "/api/v1/process",
+            files={"audio_file": ("test.mp3", b"audio data", "audio/mpeg")}
+        )
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert data["clarity_score"] == 4
+        assert data["needs_clarification"] is True
+        assert data["suggested_breakdown_categories"] == ["work", "home", "errands"]
+
+
+@patch("services.task_extraction.TaskExtractionService.guided_breakdown_extraction")
+def test_guided_breakdown_endpoint(mock_breakdown, client):
+    """Test /tasks/guided-breakdown endpoint."""
+    mock_breakdown.return_value = {
+        "tasks": [
+            {
+                "text": "Finish quarterly report",
+                "original_thought_snippet": "report due",
+                "priority": "high",
+                "estimated_duration_minutes": 90
+            }
+        ],
+        "has_more_in_category": False
+    }
+    
+    with patch("services.task_extraction.TaskExtractionService.extract_tasks") as mock_extract:
+        mock_extract.return_value = {
+            "clarity_score": 4,
+            "tasks": [],
+            "needs_clarification": True,
+            "follow_up_question": "What area is urgent?",
+            "suggested_breakdown_categories": ["work", "home"]
+        }
+        
+        create_response = client.post(
+            "/api/v1/tasks/extract",
+            json={"transcript": "Too much to handle"}
+        )
+        session_id = create_response.json()["session_id"]
+        
+        breakdown_response = client.post(
+            "/api/v1/tasks/guided-breakdown",
+            json={
+                "session_id": session_id,
+                "category": "work",
+                "category_response": "I have a quarterly report due and need to respond to client emails"
+            }
+        )
+        
+        assert breakdown_response.status_code == 200
+        data = breakdown_response.json()
+        assert data["category"] == "work"
+        assert len(data["tasks"]) == 1
+        assert data["tasks"][0]["text"] == "Finish quarterly report"
+        assert "has_more_in_category" in data
+
+
+@patch("services.task_extraction.TaskExtractionService.extract_tasks")
+def test_process_with_breakdown_suggestion(mock_extract, client):
+    """Test /process endpoint when AI suggests breakdown categories."""
+    mock_extract.return_value = {
+        "clarity_score": 4,
+        "tasks": [],
+        "needs_clarification": True,
+        "follow_up_question": "I hear you're overwhelmed. Which area feels most urgent?",
+        "suggested_breakdown_categories": ["work", "home", "errands"]
+    }
+    
+    with patch("services.transcription.TranscriptionService.transcribe_audio") as mock_transcribe:
+        mock_transcribe.return_value = "Too much to do everywhere"
+        
+        response = client.post(
+            "/api/v1/process",
+            files={"audio_file": ("test.mp3", b"audio data", "audio/mpeg")}
+        )
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert data["clarity_score"] == 4
+        assert data["needs_clarification"] is True
+        assert data["suggested_breakdown_categories"] == ["work", "home", "errands"]
+
+
+@patch("services.task_extraction.TaskExtractionService.guided_breakdown_extraction")
+def test_guided_breakdown_endpoint(mock_breakdown, client):
+    """Test /tasks/guided-breakdown endpoint."""
+    mock_breakdown.return_value = {
+        "tasks": [
+            {
+                "text": "Finish quarterly report",
+                "original_thought_snippet": "report due",
+                "priority": "high",
+                "estimated_duration_minutes": 90
+            }
+        ],
+        "has_more_in_category": False
+    }
+    
+    with patch("services.task_extraction.TaskExtractionService.extract_tasks") as mock_extract:
+        mock_extract.return_value = {
+            "clarity_score": 4,
+            "tasks": [],
+            "needs_clarification": True,
+            "follow_up_question": "What area is urgent?",
+            "suggested_breakdown_categories": ["work", "home"]
+        }
+        
+        create_response = client.post(
+            "/api/v1/tasks/extract",
+            json={"transcript": "Too much to handle"}
+        )
+        session_id = create_response.json()["session_id"]
+        
+        breakdown_response = client.post(
+            "/api/v1/tasks/guided-breakdown",
+            json={
+                "session_id": session_id,
+                "category": "work",
+                "category_response": "I have a quarterly report due and need to respond to client emails"
+            }
+        )
+        
+        assert breakdown_response.status_code == 200
+        data = breakdown_response.json()
+        assert data["category"] == "work"
+        assert len(data["tasks"]) == 1
+        assert data["tasks"][0]["text"] == "Finish quarterly report"
+        assert "has_more_in_category" in data

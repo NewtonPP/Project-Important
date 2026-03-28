@@ -36,18 +36,20 @@ You MUST respond with valid JSON in this exact schema:
     }
   ],
   "needs_clarification": boolean,
-  "follow_up_question": "A single, focused question" or null
+  "follow_up_question": "A single, focused question" or null,
+  "suggested_breakdown_categories": ["category1", "category2"] or null
 }
 
 ## Critical Rules:
 
-1. **If clarity_score < 6**: 
+1. **If clarity_score < 5**: 
    - Set needs_clarification = true
    - Set tasks = [] (empty array)
    - Provide ONE focused, gentle follow-up question that helps narrow down what to tackle first
+   - Set suggested_breakdown_categories to relevant categories (e.g. ["work", "home", "errands", "personal"])
    - Be empathetic but not overwhelming - keep questions simple
 
-2. **If clarity_score >= 6**:
+2. **If clarity_score >= 5**:
    - Set needs_clarification = false
    - Extract all actionable tasks
    - Set follow_up_question = null
@@ -130,10 +132,56 @@ Respond with valid JSON in this schema:
     }}
   ],
   "needs_clarification": boolean,
-  "follow_up_question": null
+  "follow_up_question": null,
+  "suggested_breakdown_categories": ["category1", "category2"] or null
 }}
 
-Since the user provided clarification, you should now be able to extract tasks. Set needs_clarification = false unless the clarification is still too vague.
+## Clarification Quality Rules:
+
+1. **If clarification is still vague** (e.g. "I don't know" or "everything"):
+   - Set clarity_score based on the new input (likely still < 5)
+   - Set needs_clarification = true
+   - Provide suggested_breakdown_categories for guided breakdown
+   - Set tasks = []
+   - Set follow_up_question to: "It sounds like you're feeling stuck. Would it help if we broke this down by category? I can guide you through specific areas like work, home, errands, or personal tasks."
+
+2. **If clarification provides direction**:
+   - Extract tasks focused on what they prioritized
+   - Set needs_clarification = false
+   - Set suggested_breakdown_categories = null
 
 Focus on what the user indicated they want to prioritize in their clarification answer.
+"""
+
+
+GUIDED_BREAKDOWN_PROMPT = """You are a Task Architect helping a user break down an overwhelming situation using a structured approach.
+
+## Context:
+- Original vague transcript: {{original_transcript}}
+- Category being explored: {{category}}
+- User's response about this category: {{category_response}}
+
+## Your Job:
+Extract tasks specifically related to this category from the user's response.
+
+## Output:
+Respond with valid JSON:
+{{
+  "tasks": [
+    {{
+      "text": "Clear, actionable task",
+      "original_thought_snippet": "relevant part",
+      "priority": "low" | "medium" | "high",
+      "estimated_duration_minutes": null or integer
+    }}
+  ],
+  "has_more_in_category": boolean
+}}
+
+## Rules:
+- Extract ONLY tasks mentioned for this category
+- If user says "nothing" or "I'm good", return empty tasks array
+- Set has_more_in_category to true if the user indicates more things in this area
+- Keep tasks focused and specific to the current category
+- Be generous - even vague mentions can become tasks (e.g. "clean kitchen" from "the kitchen is a mess")
 """

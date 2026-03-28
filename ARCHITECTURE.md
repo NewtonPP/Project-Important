@@ -13,6 +13,7 @@ graph TB
         Process[POST /api/v1/process]
         Extract[POST /api/v1/tasks/extract]
         Refine[POST /api/v1/tasks/refine]
+        Breakdown[POST /api/v1/tasks/guided-breakdown]
         Sessions[GET /api/v1/sessions]
         GetSession[GET /api/v1/sessions/:id]
         UpdateTask[PATCH /api/v1/tasks/:id]
@@ -93,7 +94,7 @@ sequenceDiagram
     participant GPT as OpenAI GPT-4o
     participant DB as Database
     
-    Note over Client: First request had<br/>clarity_score < 6
+    Note over Client: First request had<br/>clarity_score < 5
     
     Client->>API: POST /tasks/refine<br/>(session_id, answer)
     API->>DB: Fetch original session
@@ -105,10 +106,52 @@ sequenceDiagram
     GPT-->>Extract: Refined JSON with tasks
     Extract-->>API: refinement_result
     
-    API->>DB: Update session + add new tasks
-    DB-->>API: Success
+    alt Clarification is clear
+        API->>DB: Update session + add new tasks
+        DB-->>API: Success
+        API-->>Client: SessionResponse with tasks
+    else Clarification still vague
+        Note over Extract,GPT: Detect vague answer<br/>Suggest breakdown categories
+        API-->>Client: SessionResponse with<br/>suggested_breakdown_categories
+        Note over Client: Enter guided breakdown mode
+    end
+```
+
+## Guided Breakdown Flow (New)
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant API
+    participant Extract as Extraction Service
+    participant GPT as OpenAI GPT-4o
+    participant DB as Database
     
-    API-->>Client: SessionResponse with tasks
+    Note over Client: User accepted breakdown<br/>Categories: [work, home, errands]
+    
+    loop For each category
+        Client->>API: POST /tasks/guided-breakdown<br/>(session_id, category, response)
+        API->>DB: Fetch session
+        DB-->>API: session
+        
+        API->>Extract: guided_breakdown_extraction()<br/>(transcript, category, response)
+        Extract->>GPT: POST /chat/completions
+        Note over Extract,GPT: Extract tasks specific to category<br/>Filter by category context
+        GPT-->>Extract: Category tasks
+        Extract-->>API: tasks for category
+        
+        API->>DB: Add tasks to session
+        DB-->>API: Success
+        
+        API-->>Client: GuidedBreakdownResponse<br/>(category, tasks, has_more)
+        
+        Note over Client: Display tasks<br/>Move to next category
+    end
+    
+    Client->>API: GET /sessions/{session_id}
+    API->>DB: Fetch all tasks
+    DB-->>API: Complete session
+    API-->>Client: All accumulated tasks
 ```
 
 ## Data Model
@@ -123,6 +166,8 @@ erDiagram
         int clarity_score
         bool needs_clarification
         string follow_up_question
+        string suggested_breakdown_categories
+        bool breakdown_mode
         datetime created_at
         datetime updated_at
     }
@@ -153,25 +198,29 @@ graph LR
     subgraph ExtractionService[Task Extraction Service]
         ES1[extract_tasks]
         ES2[refine_with_clarification]
-        ES3[_call_gpt4o]
-        ES4[_validate_result]
+        ES3[guided_breakdown_extraction]
+        ES4[_call_gpt4o]
+        ES5[_validate_result]
     end
     
     subgraph PromptEngine[Prompt Engine]
         P1[TASK_ARCHITECT_PROMPT]
         P2[CLARIFICATION_REFINEMENT_PROMPT]
+        P3[GUIDED_BREAKDOWN_PROMPT]
     end
     
     TS1 --> TS2
     TS2 --> Whisper[Whisper API]
     TS1 --> TS3
     
-    ES1 --> ES3
-    ES2 --> ES3
-    ES3 --> P1
-    ES3 --> P2
-    ES3 --> GPT[GPT-4o API]
+    ES1 --> ES4
+    ES2 --> ES4
     ES3 --> ES4
+    ES4 --> P1
+    ES4 --> P2
+    ES4 --> P3
+    ES4 --> GPT[GPT-4o API]
+    ES4 --> ES5
 ```
 
 ## Error Handling Flow

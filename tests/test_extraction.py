@@ -109,3 +109,35 @@ def test_validate_extraction_result_invalid_score(extraction_service):
     
     with pytest.raises(ValueError, match="clarity_score must be integer between 1-10"):
         extraction_service._validate_extraction_result(invalid_result)
+
+
+def test_guided_breakdown_extraction(extraction_service):
+    """Test guided breakdown for specific category."""
+    original = "Everything is overwhelming"
+    category = "work"
+    response = "I have a presentation due and emails to respond to"
+    
+    mock_response = {
+        "tasks": [
+            {
+                "text": "Prepare presentation",
+                "original_thought_snippet": "presentation due",
+                "priority": "high",
+                "estimated_duration_minutes": 60
+            },
+            {
+                "text": "Respond to emails",
+                "original_thought_snippet": "emails to respond to",
+                "priority": "medium",
+                "estimated_duration_minutes": 30
+            }
+        ],
+        "has_more_in_category": False
+    }
+    
+    with patch.object(extraction_service, '_call_gpt4o', return_value=mock_response):
+        result = extraction_service.guided_breakdown_extraction(original, category, response)
+        
+        assert len(result["tasks"]) == 2
+        assert result["tasks"][0]["text"] == "Prepare presentation"
+        assert result["has_more_in_category"] is False

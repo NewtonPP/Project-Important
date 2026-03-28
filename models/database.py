@@ -15,6 +15,8 @@ class SessionDB(SQLModel, table=True):
     clarity_score: Optional[int] = Field(default=None, ge=1, le=10)
     needs_clarification: bool = Field(default=False)
     follow_up_question: Optional[str] = Field(default=None)
+    suggested_breakdown_categories: Optional[str] = Field(default=None)
+    breakdown_mode: bool = Field(default=False)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
     
