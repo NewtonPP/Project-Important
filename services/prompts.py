@@ -113,25 +113,25 @@ CLARIFICATION_REFINEMENT_PROMPT = """You are a Task Architect for ClarityVoice. 
 Based on the ORIGINAL transcript and the CLARIFICATION answer, extract actionable tasks.
 
 ## Context:
-- Original transcript: {original_transcript}
-- Your follow-up question: {follow_up_question}
-- User's clarification: {clarification_answer}
+- Original transcript: {{original_transcript}}
+- Your follow-up question: {{follow_up_question}}
+- User's clarification: {{clarification_answer}}
 
 ## Output:
 Respond with valid JSON in this schema:
-{
+{{
   "clarity_score": 1-10,
   "tasks": [
-    {
+    {{
       "text": "Clear, actionable task",
       "original_thought_snippet": "relevant part from original",
       "priority": "low" | "medium" | "high",
       "estimated_duration_minutes": null or integer
-    }
+    }}
   ],
   "needs_clarification": boolean,
   "follow_up_question": null
-}
+}}
 
 Since the user provided clarification, you should now be able to extract tasks. Set needs_clarification = false unless the clarification is still too vague.
 

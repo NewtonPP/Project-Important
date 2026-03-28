@@ -61,10 +61,12 @@ class TaskExtractionService:
         """
         logger.info("Refining tasks with clarification")
         
-        system_prompt = CLARIFICATION_REFINEMENT_PROMPT.format(
-            original_transcript=original_transcript,
-            follow_up_question=follow_up_question,
-            clarification_answer=clarification_answer
+        system_prompt = CLARIFICATION_REFINEMENT_PROMPT.replace(
+            "{{original_transcript}}", original_transcript
+        ).replace(
+            "{{follow_up_question}}", follow_up_question
+        ).replace(
+            "{{clarification_answer}}", clarification_answer
         )
         
         messages = [

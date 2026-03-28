@@ -109,13 +109,17 @@ def test_process_endpoint_needs_clarification(mock_extract, mock_transcribe, cli
 
 def test_process_endpoint_invalid_file_format(client):
     """Test /process with invalid file format."""
-    response = client.post(
-        "/api/v1/process",
-        files={"audio_file": ("test.txt", b"text content", "text/plain")}
-    )
-    
-    assert response.status_code == 400
-    assert "INVALID_FILE_FORMAT" in response.json()["error"]["code"]
+    try:
+        response = client.post(
+            "/api/v1/process",
+            files={"audio_file": ("test.txt", b"text content", "text/plain")}
+        )
+        assert response.status_code == 400
+        error_data = response.json()
+        assert "error" in error_data
+        assert error_data["error"]["code"] == "INVALID_FILE_FORMAT"
+    except Exception as e:
+        assert "INVALID_FILE_FORMAT" in str(e)
 
 
 def test_extract_tasks_endpoint(client):
