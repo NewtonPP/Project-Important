@@ -17,11 +17,6 @@ class Settings(BaseSettings):
     openai_model_transcription: str = "whisper-1"
     openai_model_completion: str = "gpt-4o"
 
-    google_client_id: str = Field(default="", env="GOOGLE_CLIENT_ID")
-    jwt_secret: str = Field(default="change-me-in-production", env="JWT_SECRET")
-    jwt_algorithm: str = Field(default="HS256", env="JWT_ALGORITHM")
-    jwt_expires_minutes: int = Field(default=60, env="JWT_EXPIRES_MINUTES")
-    
     max_retries: int = 3
     retry_backoff_factor: float = 2.0
     api_timeout_seconds: int = 60
@@ -43,13 +38,6 @@ class Settings(BaseSettings):
     def ensure_temp_dir_exists(cls, v):
         Path(v).mkdir(parents=True, exist_ok=True)
         return v
-
-    @validator("jwt_secret")
-    def validate_jwt_secret(cls, v):
-        if not v:
-            raise ValueError("JWT_SECRET cannot be empty")
-        return v
-
 
 def get_settings() -> Settings:
     """Get application settings singleton."""

@@ -5,7 +5,7 @@ from pathlib import Path
 from uuid import uuid4
 from fastapi import APIRouter, UploadFile, File, Depends, Query
 from sqlmodel import Session, select
-from models.database import SessionDB, TaskDB, UserDB, get_db_session
+from models.database import SessionDB, TaskDB, get_db_session
 from models.schemas import (
     TranscriptionResponse,
     TaskExtractionRequest,
@@ -17,13 +17,8 @@ from models.schemas import (
     SessionSummary,
     PaginationInfo,
     GuidedBreakdownRequest,
-    GuidedBreakdownResponse,
-    GoogleAuthRequest,
-    AuthResponse,
-    UserProfile
+    GuidedBreakdownResponse
 )
-from api.dependencies import get_current_user
-from services.auth import verify_google_id_token, create_access_token
 from services.transcription import TranscriptionService
 from services.task_extraction import TaskExtractionService
 from config import settings
@@ -39,69 +34,9 @@ task_extraction_service = TaskExtractionService()
 ALLOWED_EXTENSIONS = {".mp3", ".m4a", ".wav", ".webm", ".ogg"}
 
 
-@router.post("/auth/google", response_model=AuthResponse)
-async def auth_google(
-    request: GoogleAuthRequest,
-    db: Session = Depends(get_db_session)
-):
-    """Exchange a Google ID token for a ClarityVoice API JWT."""
-    claims = verify_google_id_token(request.id_token)
-
-    google_sub = claims.get("sub")
-    email = claims.get("email")
-    if not google_sub or not email:
-        raise Exception("INVALID_GOOGLE_TOKEN")
-
-    statement = select(UserDB).where(UserDB.google_sub == google_sub)
-    user = db.exec(statement).first()
-
-    if not user:
-        user = UserDB(
-            id=str(uuid4()),
-            google_sub=google_sub,
-            email=email,
-            name=claims.get("name"),
-            picture=claims.get("picture"),
-        )
-    else:
-        user.email = email
-        user.name = claims.get("name")
-        user.picture = claims.get("picture")
-        user.updated_at = datetime.utcnow()
-
-    db.add(user)
-    db.commit()
-    db.refresh(user)
-
-    access_token = create_access_token(user_id=user.id, email=user.email)
-    return AuthResponse(
-        access_token=access_token,
-        expires_in=settings.jwt_expires_minutes * 60,
-        user=UserProfile(
-            id=user.id,
-            email=user.email,
-            name=user.name,
-            picture=user.picture
-        )
-    )
-
-
-@router.get("/auth/me", response_model=UserProfile)
-async def auth_me(current_user: UserDB = Depends(get_current_user)):
-    """Get profile of currently authenticated user."""
-    return UserProfile(
-        id=current_user.id,
-        email=current_user.email,
-        name=current_user.name,
-        picture=current_user.picture
-    )
-
-
 @router.post("/audio/upload", response_model=TranscriptionResponse)
 async def upload_audio(
     audio_file: UploadFile = File(...),
-    # db: Session = Depends(get_db_session),
-    # current_user: UserDB = Depends(get_current_user)
 ):
     """
     Upload audio file and get transcription.
@@ -143,8 +78,7 @@ async def upload_audio(
 @router.post("/tasks/extract", response_model=SessionResponse)
 async def extract_tasks(
     request: TaskExtractionRequest,
-    db: Session = Depends(get_db_session),
-    current_user: UserDB = Depends(get_current_user)
+    db: Session = Depends(get_db_session)
 ):
     """
     Extract tasks from transcript text.
@@ -156,7 +90,6 @@ async def extract_tasks(
     
     session = SessionDB(
         id=str(uuid4()),
-        user_id=current_user.id,
         raw_transcript=request.transcript,
         clarity_score=extraction_result["clarity_score"],
         needs_clarification=extraction_result["needs_clarification"],
@@ -206,17 +139,13 @@ async def extract_tasks(
 @router.post("/tasks/refine", response_model=SessionResponse)
 async def refine_tasks(
     request: ClarificationRequest,
-    db: Session = Depends(get_db_session),
-    current_user: UserDB = Depends(get_current_user)
+    db: Session = Depends(get_db_session)
 ):
     """
     Refine tasks with clarification answer.
     Person 1: Architect refinement endpoint.
     """
-    statement = select(SessionDB).where(
-        SessionDB.id == request.session_id,
-        SessionDB.user_id == current_user.id
-    )
+    statement = select(SessionDB).where(SessionDB.id == request.session_id)
     session = db.exec(statement).first()
     
     if not session:
@@ -275,8 +204,7 @@ async def refine_tasks(
 @router.post("/process", response_model=SessionResponse)
 async def process_audio(
     audio_file: UploadFile = File(...),
-    # db: Session = Depends(get_db_session),
-    # current_user: UserDB = Depends(get_current_user)
+    db: Session = Depends(get_db_session)
 ):
 
     """
@@ -310,7 +238,6 @@ async def process_audio(
         
         session = SessionDB(
             id=str(uuid4()),
-            # user_id=current_user.id,
             raw_transcript=transcript,
             clarity_score=extraction_result["clarity_score"],
             needs_clarification=extraction_result["needs_clarification"],
@@ -318,7 +245,7 @@ async def process_audio(
             suggested_breakdown_categories=",".join(suggested_categories) if suggested_categories else None,
             breakdown_mode=False
         )
-        # db.add(session)
+        db.add(session)
         
         task_items = []
         for task_data in extraction_result["tasks"]:
@@ -330,7 +257,7 @@ async def process_audio(
                 priority=task_data.get("priority", "medium"),
                 estimated_duration_minutes=task_data.get("estimated_duration_minutes")
             )
-            # db.add(task)
+            db.add(task)
             task_items.append(TaskItem(
                 id=task.id,
                 text=task.text,
@@ -342,7 +269,7 @@ async def process_audio(
                 updated_at=task.updated_at
             ))
         
-        # db.commit()
+        db.commit()
         
         logger.info(f"Session created: {session.id} with {len(task_items)} tasks")
         
@@ -369,8 +296,7 @@ async def list_sessions(
     limit: int = Query(default=20, ge=1, le=100),
     sort_by: str = Query(default="created_at"),
     order: str = Query(default="desc"),
-    db: Session = Depends(get_db_session),
-    current_user: UserDB = Depends(get_current_user)
+    db: Session = Depends(get_db_session)
 ):
     """
     List all sessions with pagination.
@@ -378,14 +304,14 @@ async def list_sessions(
     """
     offset = (page - 1) * limit
     
-    statement = select(SessionDB).where(SessionDB.user_id == current_user.id)
+    statement = select(SessionDB)
     if order == "desc":
         statement = statement.order_by(SessionDB.created_at.desc())
     else:
         statement = statement.order_by(SessionDB.created_at.asc())
     
     total_count = len(
-        db.exec(select(SessionDB).where(SessionDB.user_id == current_user.id)).all()
+        db.exec(select(SessionDB)).all()
     )
     
     sessions = db.exec(statement.offset(offset).limit(limit)).all()
@@ -419,17 +345,13 @@ async def list_sessions(
 @router.get("/sessions/{session_id}", response_model=SessionResponse)
 async def get_session(
     session_id: str,
-    db: Session = Depends(get_db_session),
-    current_user: UserDB = Depends(get_current_user)
+    db: Session = Depends(get_db_session)
 ):
     """
     Get specific session with all tasks.
     Person 2: Data Specialist endpoint.
     """
-    statement = select(SessionDB).where(
-        SessionDB.id == session_id,
-        SessionDB.user_id == current_user.id
-    )
+    statement = select(SessionDB).where(SessionDB.id == session_id)
     session = db.exec(statement).first()
     
     if not session:
@@ -465,17 +387,13 @@ async def get_session(
 @router.post("/tasks/guided-breakdown", response_model=GuidedBreakdownResponse)
 async def guided_breakdown(
     request: GuidedBreakdownRequest,
-    db: Session = Depends(get_db_session),
-    current_user: UserDB = Depends(get_current_user)
+    db: Session = Depends(get_db_session)
 ):
     """
     Extract tasks from guided category breakdown.
     This endpoint is used when the user accepts structured breakdown and provides category-specific responses.
     """
-    statement = select(SessionDB).where(
-        SessionDB.id == request.session_id,
-        SessionDB.user_id == current_user.id
-    )
+    statement = select(SessionDB).where(SessionDB.id == request.session_id)
     session = db.exec(statement).first()
     
     if not session:
@@ -527,8 +445,7 @@ async def guided_breakdown(
 async def update_task(
     task_id: str,
     request: TaskUpdateRequest,
-    db: Session = Depends(get_db_session),
-    current_user: UserDB = Depends(get_current_user)
+    db: Session = Depends(get_db_session)
 ):
     """
     Update task completion status.
@@ -540,10 +457,7 @@ async def update_task(
     if not task:
         raise Exception("TASK_NOT_FOUND")
 
-    session_statement = select(SessionDB).where(
-        SessionDB.id == task.session_id,
-        SessionDB.user_id == current_user.id
-    )
+    session_statement = select(SessionDB).where(SessionDB.id == task.session_id)
     session = db.exec(session_statement).first()
     if not session:
         raise Exception("TASK_NOT_FOUND")
@@ -569,8 +483,7 @@ async def update_task(
 @router.delete("/tasks/{task_id}")
 async def delete_task(
     task_id: str,
-    db: Session = Depends(get_db_session),
-    current_user: UserDB = Depends(get_current_user)
+    db: Session = Depends(get_db_session)
 ):
     """
     Delete a specific task.
@@ -582,10 +495,7 @@ async def delete_task(
     if not task:
         raise Exception("TASK_NOT_FOUND")
 
-    session_statement = select(SessionDB).where(
-        SessionDB.id == task.session_id,
-        SessionDB.user_id == current_user.id
-    )
+    session_statement = select(SessionDB).where(SessionDB.id == task.session_id)
     session = db.exec(session_statement).first()
     if not session:
         raise Exception("TASK_NOT_FOUND")

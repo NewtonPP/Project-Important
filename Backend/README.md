@@ -40,10 +40,6 @@ MAX_UPLOAD_SIZE_MB=25
 TEMP_AUDIO_DIR=./temp
 ENVIRONMENT=development
 LOG_LEVEL=INFO
-GOOGLE_CLIENT_ID=test-google-client-id.apps.googleusercontent.com
-JWT_SECRET=local-dev-super-secret-change-me
-JWT_ALGORITHM=HS256
-JWT_EXPIRES_MINUTES=60
 ```
 
 ---
