@@ -979,6 +979,16 @@ function HistoryScreen({
     });
   };
 
+  const fullyCompletedSessions = sessions.filter((session) => {
+    const totalTasks = Number(session.task_count || 0);
+    const completedTasks = Number(session.completed_task_count || 0);
+    return totalTasks > 0 && completedTasks === totalTasks;
+  }).length;
+
+  const completedSessionProgress = sessions.length
+    ? Math.min(100, (fullyCompletedSessions / sessions.length) * 100)
+    : 0;
+
   return (
     <div className="bg-background text-on-background font-body min-h-screen">
       <div className="fixed inset-0 noise-overlay z-[100]" />
@@ -1017,13 +1027,13 @@ function HistoryScreen({
                 <div className="flex justify-between items-center mb-3">
                   <span className="font-label text-sm text-on-surface-variant font-medium">Progress</span>
                   <span className="font-label text-sm text-primary font-bold">
-                    {sessions.length} total sessions
+                    {fullyCompletedSessions}/{sessions.length} complete
                   </span>
                 </div>
                 <div className="h-3 w-full bg-surface-container-highest rounded-full overflow-hidden p-[2px]">
                   <div
                     className="h-full bg-primary rounded-full shadow-[0_0_15px_rgba(212,163,115,0.4)] transition-all duration-1000 ease-out"
-                    style={{ width: `${Math.min(100, sessions.length * 10)}%` }}
+                    style={{ width: `${completedSessionProgress}%` }}
                   />
                 </div>
               </div>
