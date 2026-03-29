@@ -100,8 +100,8 @@ async def auth_me(current_user: UserDB = Depends(get_current_user)):
 @router.post("/audio/upload", response_model=TranscriptionResponse)
 async def upload_audio(
     audio_file: UploadFile = File(...),
-    db: Session = Depends(get_db_session),
-    current_user: UserDB = Depends(get_current_user)
+    # db: Session = Depends(get_db_session),
+    # current_user: UserDB = Depends(get_current_user)
 ):
     """
     Upload audio file and get transcription.
@@ -275,9 +275,10 @@ async def refine_tasks(
 @router.post("/process", response_model=SessionResponse)
 async def process_audio(
     audio_file: UploadFile = File(...),
-    db: Session = Depends(get_db_session),
-    current_user: UserDB = Depends(get_current_user)
+    # db: Session = Depends(get_db_session),
+    # current_user: UserDB = Depends(get_current_user)
 ):
+
     """
     Main endpoint: Upload audio -> Transcribe -> Extract tasks -> Save.
     Combines all three team members' work into one workflow.
@@ -309,7 +310,7 @@ async def process_audio(
         
         session = SessionDB(
             id=str(uuid4()),
-            user_id=current_user.id,
+            # user_id=current_user.id,
             raw_transcript=transcript,
             clarity_score=extraction_result["clarity_score"],
             needs_clarification=extraction_result["needs_clarification"],
@@ -317,7 +318,7 @@ async def process_audio(
             suggested_breakdown_categories=",".join(suggested_categories) if suggested_categories else None,
             breakdown_mode=False
         )
-        db.add(session)
+        # db.add(session)
         
         task_items = []
         for task_data in extraction_result["tasks"]:
@@ -329,7 +330,7 @@ async def process_audio(
                 priority=task_data.get("priority", "medium"),
                 estimated_duration_minutes=task_data.get("estimated_duration_minutes")
             )
-            db.add(task)
+            # db.add(task)
             task_items.append(TaskItem(
                 id=task.id,
                 text=task.text,
@@ -341,7 +342,7 @@ async def process_audio(
                 updated_at=task.updated_at
             ))
         
-        db.commit()
+        # db.commit()
         
         logger.info(f"Session created: {session.id} with {len(task_items)} tasks")
         
