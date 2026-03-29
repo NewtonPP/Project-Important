@@ -17,6 +17,7 @@ Built for people experiencing executive dysfunction.
 ```bash
 # Install dependencies
 pip install -r requirements.txt
+pip install requests
 
 # Add your OpenAI API key
 echo "OPENAI_API_KEY=sk-proj-your-key-here" > .env
